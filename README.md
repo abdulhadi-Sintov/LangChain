@@ -1,19 +1,19 @@
 # LangChain
 <!--   Whole flow of integrating the LangChain AI project.   -->
 
-# -> Install Node.js (LTS)
+ -> Install Node.js (LTS)
 
 LangChain TypeScript runs on Node.
 Do this:
 Go to 👉 https://nodejs.org
 
-# -> Verify installation:
+ -> Verify installation:
 
 Open Command Prompt / Terminal and run:
 node -v
 npm -v
 
-# -> Install VS Code
+ -> Install VS Code
 
 Go to https://code.visualstudio.com
 
@@ -25,51 +25,51 @@ TypeScript and JavaScript Language Features (usually built-in)
 ESLint
 Prettier
 
-# -> Create a folder name is LangChain and open this folder in VS code.
-# -> Open terninal and run
+ -> Create a folder name is LangChain and open this folder in VS code.
+ -> Open terninal and run
 
 npm init -y
 
 this create the folder 'package.json'
 
-# -> Install TypeScript & Node types
+ -> Install TypeScript & Node types
 
 npm install -D typescript ts-node @types/node
 
-# -> Create folder 'tsconfig.json' run 
+ -> Create folder 'tsconfig.json' run 
 
 npx tsc --init
 
-# -> Create folder structure
+ -> Create folder structure
 
 mkdir src
 
 touch src/index.ts {if this command is not run, then you create file Index.ts manually in src folder}
 
-# -> Test TypeScript Setup
+ -> Test TypeScript Setup
 
 place 'console.log("TypeScript is working!");' in index.ts
 
-# -> Install LangChain (TypeScript)
+ -> Install LangChain (TypeScript)
 
 npm install langchain @langchain/core
 
-# -> Install Ollama
+ -> Install Ollama
 
 Go to https://ollama.com
 
-# -> In PowerShell Run:
+ -> In PowerShell Run:
 
 <!-- 
 Restart your terminal, or open the VS Code again
  -->
 ollama --version
 
-# -> Now test the service:
+ -> Now test the service:
 
 ollama list
 
-# -> Pull a Model (Very Important)
+ -> Pull a Model (Very Important)
 
 ollama pull llama3.1
 
@@ -84,7 +84,7 @@ Exit with:
 
 /bye 
 -->
-# -> Install Ollama adapter:
+ -> Install Ollama adapter:
 
 npm install @langchain/community
 npm install @langchain/ollama
@@ -99,7 +99,7 @@ Press Ctrl + Shift + P
 Type: TypeScript: Restart TS Server
 Hit Enter
 
-# -> Open tsconfig.json
+ -> Open tsconfig.json
 Replace it completely with this (copy–paste):
 
 <!-- 
@@ -120,7 +120,7 @@ Replace it completely with this (copy–paste):
 
  -->
 
- # -> Fix package.json
+  -> Fix package.json
 
  <!--
  {
@@ -133,7 +133,8 @@ Replace it completely with this (copy–paste):
 }
   -->
   Run project using command
- #   npm run dev
+  
+   npm run dev
  <!-- 
  "start": "ts-node src/index.ts"
  change only the file name and hit run command.
