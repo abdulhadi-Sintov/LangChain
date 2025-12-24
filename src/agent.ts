@@ -6,6 +6,7 @@ import { tool } from "@langchain/core/tools";
 import {ChatPromptTemplate, MessagesPlaceholder} from "@langchain/core/prompts";
 import { ChatMessageHistory } from "@langchain/community/stores/message/in_memory";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { queryDB } from "./SQLQueryTool.js";
 
 /* =========================
    1️-TOOL
@@ -20,7 +21,7 @@ const getCurrentTime = tool(
 );
 
 const tools = {
-  get_current_time: getCurrentTime,
+  query_database: queryDB,
 };
 
 /* =========================
@@ -28,8 +29,8 @@ const tools = {
    ========================= */
 const model = new ChatOllama({
   model: "llama3.1",
-  temperature: 0,
-}).bindTools([getCurrentTime]);
+  temperature: 6,
+}).bindTools([queryDB]);
 
 /* =========================
    3️- PROMPT
@@ -37,14 +38,25 @@ const model = new ChatOllama({
 const prompt = ChatPromptTemplate.fromMessages([
   [
     "system",
-    `You are a helpful chatbot.
-You remember facts the user tells you (like their name).
-Use tools ONLY when needed.`,
+    `You are a database agent.
+
+CRITICAL RULES:
+- You MUST use the SQL tool for ANY question about data
+- NEVER answer from memory or guessing
+- If a SQL tool is not used, respond: "I must query the database"
+- Always use DISTINCT when selecting names
+- Never return duplicate rows
+
+Database schema:
+Table: employees
+Columns: id, name, department, salary`,
   ],
+  //Past messages are injected here
   new MessagesPlaceholder("history"),
+  //user message
   ["human", "{input}"],
 ]);
-
+// connect prompt and model
 const chain = prompt.pipe(model);
 
 /* =========================
@@ -52,8 +64,11 @@ const chain = prompt.pipe(model);
    ========================= */
 const store = new Map<string, ChatMessageHistory>();
 
+
+//Function to get memory for a user
 const getHistory = (sessionId: string) => {
   if (!store.has(sessionId)) {
+    //Create memory if first time
     store.set(sessionId, new ChatMessageHistory());
   }
   return store.get(sessionId)!;
@@ -62,6 +77,7 @@ const getHistory = (sessionId: string) => {
 /* =========================
    5️- CLI LOOP
    ========================= */
+   //Enables terminal input/output
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -92,23 +108,23 @@ const ask = () => {
 
     // Step 2: If tool requested, run it correctly
     if (assistantMessage.tool_calls?.length) {
-      for (const call of assistantMessage.tool_calls) {
-        const tool = tools[call.name as keyof typeof tools];
-        const toolResult = await tool.invoke(call.args);
+  for (const call of assistantMessage.tool_calls) {
+    const tool = tools[call.name as keyof typeof tools]!;
 
-        // Step 3: Send FULL context back
-        aiResponse = await model.invoke([
-          ...past,
-          new HumanMessage(input),
-          assistantMessage,
-          {
-            role: "tool",
-            tool_call_id: call.id,
-            content: toolResult,
-          },
-        ]);
-      }
-    }
+    const toolResult = await tool.invoke(call.args as { query: string });
+
+    aiResponse = await model.invoke([
+      ...past,
+      new HumanMessage(input),
+      assistantMessage,
+      {
+        role: "tool",
+        tool_call_id: call.id!,
+        content: JSON.stringify(toolResult),
+      },
+    ]);
+  }
+}
 
     const finalText =
       typeof aiResponse.content === "string"
