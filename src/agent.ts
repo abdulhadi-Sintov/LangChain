@@ -1,27 +1,16 @@
 import readline from "readline";
-import { z } from "zod";
 
 import { ChatOllama } from "@langchain/ollama";
-import { tool } from "@langchain/core/tools";
-import {ChatPromptTemplate, MessagesPlaceholder} from "@langchain/core/prompts";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
 import { ChatMessageHistory } from "@langchain/community/stores/message/in_memory";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { tools } from "./Tools.js";
+import type { StructuredTool } from "@langchain/core/tools";
 
-/* =========================
-   1️-TOOL
-   ========================= */
-const getCurrentTime = tool(
-  async () => new Date().toLocaleTimeString(),
-  {
-    name: "get_current_time",
-    description: "Returns the current local time",
-    schema: z.object({}),
-  }
-);
-
-const tools = {
-  get_current_time: getCurrentTime,
-};
+const toolRegistry: Record<string, StructuredTool> = tools;
 
 /* =========================
    2️- MODEL
@@ -29,7 +18,7 @@ const tools = {
 const model = new ChatOllama({
   model: "llama3.1",
   temperature: 0,
-}).bindTools([getCurrentTime]);
+}).bindTools(Object.values(tools)); // Bind all tools
 
 /* =========================
    3️- PROMPT
@@ -37,14 +26,49 @@ const model = new ChatOllama({
 const prompt = ChatPromptTemplate.fromMessages([
   [
     "system",
-    `You are a helpful chatbot.
-You remember facts the user tells you (like their name).
-Use tools ONLY when needed.`,
+    `You are a strict database agent.
+
+EXECUTION FLOW (MANDATORY):
+
+1. Understand the user's question and identify:
+   - Table name
+   - Column names
+   - Filters
+
+2. If the table or column names are NOT 100% known:
+   - Call describe_table for the table
+   - Continue to Step 3 (DO NOT STOP)
+
+3. Always retrieve data using query_database:
+   - Use SELECT queries only
+   - Use case-insensitive comparisons for text
+   - Never guess values
+
+4. After receiving query results:
+   - Analyze ONLY the returned data
+   - Do NOT reuse past answers
+   - Do NOT explain schema unless asked
+
+5. Return a FINAL answer:
+   - Directly answer the user’s question
+   - Use plain text
+   - No reasoning, no tool output, no explanations
+
+ABSOLUTE RULES:
+- NEVER answer without querying the database
+- NEVER stop after schema discovery
+- NEVER reuse previous answers
+- NEVER hallucinate
+- NEVER explain unless asked
+
+`,
   ],
+  //Past messages are injected here
   new MessagesPlaceholder("history"),
+  //user message
   ["human", "{input}"],
 ]);
-
+// connect prompt and model
 const chain = prompt.pipe(model);
 
 /* =========================
@@ -52,8 +76,10 @@ const chain = prompt.pipe(model);
    ========================= */
 const store = new Map<string, ChatMessageHistory>();
 
+//Function to get memory for a user
 const getHistory = (sessionId: string) => {
   if (!store.has(sessionId)) {
+    //Create memory if first time
     store.set(sessionId, new ChatMessageHistory());
   }
   return store.get(sessionId)!;
@@ -62,6 +88,7 @@ const getHistory = (sessionId: string) => {
 /* =========================
    5️- CLI LOOP
    ========================= */
+//Enables terminal input/output
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -88,25 +115,29 @@ const ask = () => {
     });
 
     // Save assistant tool request message
-    const assistantMessage = aiResponse as AIMessage;
+    let assistantMessage = aiResponse as AIMessage;
 
     // Step 2: If tool requested, run it correctly
-    if (assistantMessage.tool_calls?.length) {
+    while (assistantMessage.tool_calls?.length) {
       for (const call of assistantMessage.tool_calls) {
-        const tool = tools[call.name as keyof typeof tools];
+        const tool = toolRegistry[call.name]!;
+        if (!tool) {
+          throw new Error(`Unknown tool: ${call.name}`);
+        }
+
         const toolResult = await tool.invoke(call.args);
 
-        // Step 3: Send FULL context back
         aiResponse = await model.invoke([
           ...past,
-          new HumanMessage(input),
+          //new HumanMessage(input),
           assistantMessage,
           {
             role: "tool",
-            tool_call_id: call.id,
-            content: toolResult,
+            tool_call_id: call.id!,
+            content: JSON.stringify(toolResult),
           },
         ]);
+         assistantMessage = aiResponse as AIMessage;
       }
     }
 
