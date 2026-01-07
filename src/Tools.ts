@@ -2,6 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { db } from "./Database.js";
 import { pool } from "./Database.js";
+import sql from "mssql";
 
 // SQL Query Tool - only allows SELECT queries
 
@@ -60,17 +61,17 @@ export const listTables = tool(
 // Describe a table
 
 export const describeTable = tool(
-  async ({ table }: { table: string }) => {
-    return pool
+  async ({ table }: { table: string }): Promise<{ COLUMN_NAME: string; DATA_TYPE: string }[]> => {
+    const result = await pool
       .request()
-      .query(
-        `
-      SELECT COLUMN_NAME, DATA_TYPE
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_NAME = ?
-    `
-      )
-      .then((result) => result.recordset);
+      .input("tableName", sql.NVarChar, table)
+      .query(`
+        SELECT COLUMN_NAME, DATA_TYPE
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+      `);
+
+    return result.recordset;
   },
   {
     name: "describe_table",

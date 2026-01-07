@@ -17,8 +17,8 @@ const toolRegistry: Record<string, StructuredTool> = tools;
    ========================= */
 const model = new ChatOllama({
   model: "llama3.1",
-  temperature: 1.0,
-}).bindTools([Object.values(tools)]); // Bind all tools
+  temperature: 0,
+}).bindTools(Object.values(tools)); // Bind all tools
 
 /* =========================
    3️- PROMPT
@@ -26,18 +26,42 @@ const model = new ChatOllama({
 const prompt = ChatPromptTemplate.fromMessages([
   [
     "system",
-    `You are a database agent.
+    `You are a strict database agent.
 
-CRITICAL RULES:
-- You MUST use the SQL tool for ANY question about data
-- NEVER answer from memory or guessing
-- If a SQL tool is not used, respond: "I must query the database"
-- Always use DISTINCT when selecting names
-- Never return duplicate rows
+EXECUTION FLOW (MANDATORY):
 
-Database schema:
-Table: RM_StaffTypes
-Columns: StaffType, TypeName, IsVisbile`,
+1. Understand the user's question and identify:
+   - Table name
+   - Column names
+   - Filters
+
+2. If the table or column names are NOT 100% known:
+   - Call describe_table for the table
+   - Continue to Step 3 (DO NOT STOP)
+
+3. Always retrieve data using query_database:
+   - Use SELECT queries only
+   - Use case-insensitive comparisons for text
+   - Never guess values
+
+4. After receiving query results:
+   - Analyze ONLY the returned data
+   - Do NOT reuse past answers
+   - Do NOT explain schema unless asked
+
+5. Return a FINAL answer:
+   - Directly answer the user’s question
+   - Use plain text
+   - No reasoning, no tool output, no explanations
+
+ABSOLUTE RULES:
+- NEVER answer without querying the database
+- NEVER stop after schema discovery
+- NEVER reuse previous answers
+- NEVER hallucinate
+- NEVER explain unless asked
+
+`,
   ],
   //Past messages are injected here
   new MessagesPlaceholder("history"),
@@ -91,21 +115,21 @@ const ask = () => {
     });
 
     // Save assistant tool request message
-    const assistantMessage = aiResponse as AIMessage;
+    let assistantMessage = aiResponse as AIMessage;
 
     // Step 2: If tool requested, run it correctly
-    if (assistantMessage.tool_calls?.length) {
+    while (assistantMessage.tool_calls?.length) {
       for (const call of assistantMessage.tool_calls) {
         const tool = toolRegistry[call.name]!;
         if (!tool) {
           throw new Error(`Unknown tool: ${call.name}`);
         }
 
-        const toolResult = await tool.invoke(call.args as { query: string });
+        const toolResult = await tool.invoke(call.args);
 
         aiResponse = await model.invoke([
           ...past,
-          new HumanMessage(input),
+          //new HumanMessage(input),
           assistantMessage,
           {
             role: "tool",
@@ -113,6 +137,7 @@ const ask = () => {
             content: JSON.stringify(toolResult),
           },
         ]);
+         assistantMessage = aiResponse as AIMessage;
       }
     }
 
