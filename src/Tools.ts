@@ -11,6 +11,7 @@ export const queryDB = tool(
     if (!query.toLowerCase().startsWith("select")) {
       throw new Error("Only SELECT queries are allowed.");
     }
+    console.log("query", query);
     //return db.prepare(query).all();
     const result = await pool.request().query(query);
     return result.recordset;
